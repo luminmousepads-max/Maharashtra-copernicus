@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maharashtra Copernicus Sentinel-2 — R&D Agricultural Telemetry Platform</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet GIS Real Satellite Mapping Library -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    :root {
+      --bg: #0c120e;
+      --surface: #141f17;
+      --card: #19271e;
+      --card-border: rgba(112, 130, 89, 0.25);
+      --card-hover: rgba(112, 130, 89, 0.45);
+      --text: #f0f4ee;
+      --text-muted: #8e9e8c;
+      --text-dim: #60725e;
+      
+      --ndvi: #10b981;
+      --ndvi-light: rgba(16, 185, 129, 0.15);
+      --ndvi-glow: rgba(16, 185, 129, 0.35);
+      
+      --water: #38bdf8;
+      --water-light: rgba(56, 189, 248, 0.15);
+      --water-glow: rgba(56, 189, 248, 0.35);
+      
+      --ghg: #f59e0b;
+      --ghg-light: rgba(245, 158, 11, 0.15);
+      --ghg-glow: rgba(245, 158, 11, 0.35);
+      
+      --danger: #ef4444;
+      --sidebar-w: 320px;
+      --telemetry-w: 340px;
+      --radius: 12px;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    [data-theme="light"] {
+      --bg: #f5f6f2;
+      --surface: #ffffff;
+      --card: #ffffff;
+      --card-border: rgba(112, 130, 89, 0.35);
+      --card-hover: rgba(112, 130, 89, 0.6);
+      --text: #1a241b;
+      --text-muted: #526150;
+      --text-dim: #7f8f7d;
+      --ndvi: #059669;
+      --ndvi-light: rgba(5, 150, 105, 0.12);
+      --water: #0284c7;
+      --water-light: rgba(2, 132, 199, 0.12);
+      --ghg: #d97706;
+      --ghg-light: rgba(217, 119, 6, 0.12);
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      transition: background 0.25s, color 0.25s;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* NAVIGATION / TOPBAR */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--card-border);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      backdrop-filter: blur(16px);
+      padding: 10px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    .topbar-inner {
+      max-width: 1720px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .brand-icon-wrap {
+      position: relative;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--ndvi), #047857);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 18px;
+      box-shadow: 0 0 16px var(--ndvi-glow);
+    }
+
+    .pulse-dot {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 10px;
+      height: 10px;
+      background: #10b981;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: var(--surface);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge-ndvi {
+      background: var(--ndvi-light);
+      color: var(--ndvi);
+      border-color: var(--ndvi);
+    }
+
+    .badge-water {
+      background: var(--water-light);
+      color: var(--water);
+      border-color: var(--water);
+    }
+
+    .badge-ghg {
+      background: var(--ghg-light);
+      color: var(--ghg);
+      border-color: var(--ghg);
+    }
+
+    /* TABS */
+    .nav-tabs {
+      display: flex;
+      background: var(--bg);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      gap: 4px;
+    }
+
+    .tab-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .tab-btn.active {
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--card-border);
+    }
+
+    .actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      transition: all 0.15s;
+    }
+
+    .icon-btn:hover {
+      border-color: var(--ndvi);
+      color: var(--ndvi);
+    }
+
+    /* MAIN CONTAINER */
+    .main-wrap {
+      max-width: 1720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px;
+      flex: 1;
+    }
+
+    /* THREE-COLUMN BROWSER GRID */
+    .browser-grid {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr var(--telemetry-w);
+      gap: 16px;
+      align-items: start;
+    }
+
+    @media (max-width: 1280px) {
+      .browser-grid {
+        grid-template-columns: 290px 1fr 310px;
+      }
+    }
+
+    @media (max-width: 1060px) {
+      .browser-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .col-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* CARD DESIGN */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--card-hover);
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* INPUTS & SELECTS */
+    .input, .select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: 9px;
+      padding: 9px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .input:focus, .select:focus {
+      border-color: var(--ndvi);
+      box-shadow: 0 0 0 3px var(--ndvi-light);
+    }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 9px;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn-ndvi {
+      background: var(--ndvi);
+      color: #ffffff;
+      box-shadow: 0 4px 12px var(--ndvi-glow);
+    }
+    .btn-ndvi:hover {
+      background: #059669;
+    }
+
+    .btn-water {
+      background: var(--water);
+      color: #ffffff;
+      box-shadow: 0 4px 12px var(--water-glow);
+    }
+
+    .btn-outline {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      border-color: var(--ndvi);
+      color: var(--ndvi);
+    }
+
+    .btn-dark {
+      background: #0f1712;
+      border: 1px solid var(--card-border);
+      color: var(--text);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    /* SPECTRAL LAYER SELECTOR */
+    .layer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .layer-card {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+    }
+
+    .layer-card:hover {
+      border-color: var(--text-muted);
+    }
+
+    .layer-card.active {
+      border-color: var(--ndvi);
+      background: var(--ndvi-light);
+      box-shadow: 0 0 12px var(--ndvi-light);
+    }
+
+    .layer-card.active.water-mode {
+      border-color: var(--water);
+      background: var(--water-light);
+    }
+
+    .layer-card.active.ghg-mode {
+      border-color: var(--ghg);
+      background: var(--ghg-light);
+    }
+
+    .layer-name {
+      font-size: 12px;
+      font-weight: 800;
+      display: block;
+      color: var(--text);
+    }
+
+    .layer-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      display: block;
+    }
+
+    /* SECTOR LIST CONTAINER */
+    .sector-scroll {
+      max-height: 260px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-right: 4px;
+    }
+
+    .sector-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+    .sector-scroll::-webkit-scrollbar-thumb {
+      background: var(--card-border);
+      border-radius: 4px;
+    }
+
+    .sector-item {
+      padding: 9px 12px;
+      border-radius: 9px;
+      border: 1px solid var(--card-border);
+      background: var(--surface);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      transition: all 0.15s;
+    }
+
+    .sector-item:hover {
+      border-color: var(--ndvi);
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .sector-item.active {
+      border-color: var(--ndvi);
+      background: var(--ndvi-light);
+    }
+
+    /* REAL LEAFLET SATELLITE MAP CONTAINER */
+    .map-card {
+      padding: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius);
+    }
+
+    .map-header {
+      background: var(--surface);
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .real-map-container {
+      position: relative;
+      width: 100%;
+      height: 520px;
+      background: #090e0b;
+      z-index: 1;
+    }
+
+    #leafletMap {
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: #090e0b;
+    }
+
+    /* LEAFLET CUSTOM THEME OVERRIDES */
+    .leaflet-bar {
+      border: 1px solid var(--card-border) !important;
+      border-radius: 8px !important;
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+    }
+    .leaflet-bar a {
+      background-color: var(--surface) !important;
+      color: var(--text) !important;
+      border-bottom: 1px solid var(--card-border) !important;
+    }
+    .leaflet-bar a:hover {
+      background-color: var(--card) !important;
+      color: var(--ndvi) !important;
+    }
+
+    .leaflet-popup-content-wrapper {
+      background: var(--surface) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--card-border) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+      backdrop-filter: blur(10px);
+    }
+    .leaflet-popup-tip {
+      background: var(--surface) !important;
+      border: 1px solid var(--card-border) !important;
+    }
+    .leaflet-container a.leaflet-popup-close-button {
+      color: var(--text-muted) !important;
+      padding: 6px !important;
+    }
+
+    .custom-popup-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .custom-popup-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .custom-popup-stats {
+      display: flex;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .map-footer {
+      background: var(--surface);
+      padding: 9px 16px;
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    /* BASEMAP SELECTOR TABS */
+    .basemap-picker {
+      display: flex;
+      background: var(--bg);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      gap: 3px;
+    }
+    .basemap-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .basemap-btn.active {
+      background: var(--card);
+      color: var(--ndvi);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    /* TELEMETRY GAUGES */
+    .telemetry-card {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      transition: border-color 0.2s;
+    }
+
+    .telemetry-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .telemetry-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .telemetry-val {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .telemetry-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* 10x10 PIXEL MATRIX */
+    .matrix-box {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 2.5px;
+      background: var(--surface);
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid var(--card-border);
+      width: 210px;
+      height: 210px;
+      margin: 8px auto;
+    }
+
+    .subpixel {
+      border-radius: 2px;
+      cursor: crosshair;
+      transition: transform 0.1s, outline 0.1s;
+    }
+
+    .subpixel:hover {
+      transform: scale(1.4);
+      outline: 2px solid #fff;
+      z-index: 10;
+    }
+
+    /* TABLES */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--text-muted);
+      padding: 10px 12px;
+      position: sticky;
+      top: 0;
+      font-weight: 800;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    /* WEATHER WIDGET */
+    .weather-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* MODAL */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 580px;
+      width: 100%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      
+      <a href="#" class="brand">
+        <div class="brand-icon-wrap mono">
+          S2
+          <span class="pulse-dot"></span>
+        </div>
+        <div>
+          <div class="brand-title">
+            <span>MAHARASHTRA COPERNICUS BROWSER</span>
+            <span class="badge badge-ndvi">11th R&D MODEL</span>
+            <span id="headerSectorCountBadge" class="badge badge-water mono">152 SECTORS</span>
+          </div>
+          <div class="brand-sub">ESA Sentinel-2 Multispectral Crop Vigour (NDVI), Surface Humidity & Field GHG Platform</div>
+        </div>
+      </a>
+
+      <!-- NAVIGATION TABS -->
+      <nav class="nav-tabs">
+        <button onclick="switchTab('browser')" id="tab-browser" class="tab-btn active">
+          <span>🛰️</span> Live Satellite Map
+        </button>
+        <button onclick="switchTab('photo')" id="tab-photo" class="tab-btn">
+          <span>📸</span> Pune Photo Scanner
+        </button>
+        <button onclick="switchTab('database')" id="tab-database" class="tab-btn">
+          <span>🗂️</span> Maharashtra DB (<span id="tabCount">152</span>)
+        </button>
+        <button onclick="switchTab('simulator')" id="tab-simulator" class="tab-btn">
+          <span>🧮</span> NDVI Formula Lab
+        </button>
+        <button onclick="switchTab('board')" id="tab-board" class="tab-btn">
+          <span>📋</span> 6-Section Board
+        </button>
+      </nav>
+
+      <!-- HEADER ACTIONS -->
+      <div class="actions-group">
+        <!-- Live Weather Widget Pill -->
+        <div id="topWeatherPill" class="weather-pill mono">
+          <span>🌤️</span>
+          <span id="topWeatherText">Pune: 28.4°C • 74% RH</span>
+        </div>
+
+        <button onclick="openExportModal()" class="btn btn-outline" title="Export GeoJSON / CSV">
+          ⬇ Export
+        </button>
+
+        <a id="esaPortalLink" href="https://browser.dataspace.copernicus.eu/?zoom=13&lat=18.5808&lng=73.9787&datasetId=S2_L2A_CDAS" target="_blank" rel="noopener noreferrer" class="btn btn-dark" title="Open Official Copernicus Browser">
+          ESA DataSpace ↗
+        </a>
+
+        <button onclick="toggleTheme()" class="icon-btn" title="Toggle Dark/Light Mode" id="themeToggleBtn">
+          🌓
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT -->
+  <main class="main-wrap">
+
+    <!-- ============================================================= -->
+    <!-- VIEW 1: SATELLITE BROWSER (3-COL MISSION CONTROL)            -->
+    <!-- ============================================================= -->
+    <section id="view-browser" class="browser-grid">
+
+      <!-- LEFT COLUMN: REGION, SPECTRAL LAYERS, STAGE, SECTORS -->
+      <div class="col-stack">
+
+        <!-- 1. Division Selector & Search -->
+        <div class="card">
+          <div class="section-label">
+            <span>1. Maharashtra Division</span>
+            <span class="mono" style="color:var(--ndvi);">36 Districts</span>
+          </div>
+
+          <div style="display:flex; gap:6px; margin-bottom:8px;">
+            <input id="searchInput" class="input" type="text" placeholder="Search Wagholi, Baramati, Nashik..." onkeydown="if(event.key==='Enter') searchFarmland()" />
+            <button onclick="searchFarmland()" class="btn btn-dark">Find</button>
+          </div>
+
+          <select id="hubSelector" onchange="flyToDivision(this.value)" class="select" style="margin-bottom:8px;">
+            <option value="PUNE_CORE" selected>Div 1: Wagholi & Pune District Core (32)</option>
+            <option value="PASCHIM">Div 2: Paschim Maharashtra — Satara/Sangli (25)</option>
+            <option value="NASHIK">Div 3: Nashik & Khandesh Belt (25)</option>
+            <option value="MARATHWADA">Div 4: Marathwada — Sambhajinagar/Latur (25)</option>
+            <option value="VIDARBHA">Div 5: Vidarbha — Nagpur/Amravati (25)</option>
+            <option value="KONKAN">Div 6: Konkan Coastal Belt (20)</option>
+            <option value="ALL">All 6 Maharashtra Divisions (152+ Sectors)</option>
+          </select>
+
+          <div class="grid-2">
+            <button onclick="scanViewportParcels()" class="btn btn-ndvi">+ Scan Viewport</button>
+            <button onclick="switchTab('photo')" class="btn btn-water">📸 Photo Match</button>
+          </div>
+        </div>
+
+        <!-- 2. Spectral Map Layers -->
+        <div class="card">
+          <div class="section-label">
+            <span>2. Spectral Map Layer</span>
+            <span id="activeLayerLabel" class="badge badge-ndvi mono">NDVI</span>
+          </div>
+          <div class="layer-grid">
+            <div onclick="setSpectralMode('NDVI')" id="layerCard-NDVI" class="layer-card active">
+              <span class="layer-name">🌱 NDVI Vigour</span>
+              <span class="layer-desc mono">(NIR - Red)/(NIR + Red)</span>
+            </div>
+            <div onclick="setSpectralMode('HUMIDITY')" id="layerCard-HUMIDITY" class="layer-card">
+              <span class="layer-name">💧 Soil Moisture</span>
+              <span class="layer-desc mono">RH% & 0-5cm Topsoil</span>
+            </div>
+            <div onclick="setSpectralMode('EMISSION')" id="layerCard-EMISSION" class="layer-card">
+              <span class="layer-name">🔥 Field GHG Flux</span>
+              <span class="layer-desc mono">N₂O, CH₄ & CO₂e</span>
+            </div>
+            <div onclick="setSpectralMode('RGB')" id="layerCard-RGB" class="layer-card">
+              <span class="layer-name">🛰️ True Color</span>
+              <span class="layer-desc mono">Sentinel-2 B4-B3-B2</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Growing Season Phenology Stage -->
+        <div class="card">
+          <div class="section-label">
+            <span>3. Growing Season Phenology</span>
+            <span id="stageBadge" class="mono" style="color:var(--ndvi); font-weight:800;">DOY 205 (Peak)</span>
+          </div>
+          <select id="stageSelect" onchange="changeSeason(this.value)" class="select" style="margin-bottom:10px;">
+            <option value="0">Apr 12 (DOY 102) — Pre-Sowing / Fallow</option>
+            <option value="1">May 24 (DOY 144) — Early Emergence</option>
+            <option value="2">Jun 18 (DOY 169) — Jointing Stage</option>
+            <option value="3" selected>Jul 24 (DOY 205) — Tasseling (Peak Vigour)</option>
+            <option value="4">Sep 08 (DOY 251) — Maturity Stage</option>
+            <option value="5">Oct 14 (DOY 287) — Post-Harvest Stubble</option>
+          </select>
+          <input id="stageRange" type="range" min="0" max="5" step="1" value="3" oninput="changeSeason(this.value)" style="width:100%; accent-color:var(--ndvi); cursor:pointer;" />
+        </div>
+
+        <!-- 4. Farmland Sectors List -->
+        <div class="card">
+          <div class="section-label">
+            <span>4. Farmland Sectors</span>
+            <input id="sectorFilterInput" type="text" placeholder="Filter crop/area..." oninput="renderSectorsSidebar()" class="input" style="width:120px; padding:3px 8px; font-size:11px;" />
+          </div>
+          <div id="sectorsSidebarList" class="sector-scroll"></div>
+        </div>
+
+      </div>
+
+      <!-- CENTER COLUMN: REAL SATELLITE MAP & PHENOLOGY GRAPH -->
+      <div class="col-stack">
+
+        <!-- REAL SATELLITE MAP CARD -->
+        <div class="card map-card">
+          <div class="map-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="width:8px; height:8px; border-radius:50%; background:var(--ndvi); box-shadow:0 0 8px var(--ndvi);"></span>
+              <span id="mapStatusText" class="mono" style="font-size:11px; color:var(--text-muted);">
+                Real Satellite Basemap • Click any farmland polygon to inspect
+              </span>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <!-- Basemap Picker -->
+              <div class="basemap-picker">
+                <button onclick="setBasemap('satellite')" id="bm-satellite" class="basemap-btn active">🛰️ Satellite</button>
+                <button onclick="setBasemap('hybrid')" id="bm-hybrid" class="basemap-btn">🏷️ Hybrid</button>
+                <button onclick="setBasemap('streets')" id="bm-streets" class="basemap-btn">🗺️ Streets</button>
+                <button onclick="setBasemap('dark')" id="bm-dark" class="basemap-btn">🌑 Dark GIS</button>
+              </div>
+
+              <button onclick="fitAllMaharashtra()" class="btn btn-outline" style="padding:4px 10px;" title="View all 152 Maharashtra sectors">Fit All</button>
+              <button onclick="zoomToCurrentPlot()" class="btn btn-ndvi" style="padding:4px 10px;">Zoom Parcel</button>
+              <button onclick="resetWagholiView()" class="btn btn-dark" style="padding:4px 10px;">Wagholi Core</button>
+            </div>
+          </div>
+
+          <!-- Leaflet Real Map Viewport -->
+          <div class="real-map-container">
+            <div id="leafletMap"></div>
+          </div>
+
+          <div class="map-footer">
+            <div id="legendContainer" style="display:flex; flex-wrap:wrap; gap:14px;"></div>
+            <div id="coordinatesText" class="mono" style="font-size:11px; font-weight:700; color:var(--text-muted);">
+              18.5800°N, 74.0000°E • Zoom: 13
+            </div>
+          </div>
+        </div>
+
+        <!-- PHENOLOGY CURVE & OBSERVATION LOG -->
+        <div class="grid-2">
+          
+          <div class="card">
+            <div class="section-label">
+              <span>Seasonal Multi-Date Phenology</span>
+              <button onclick="logCurrentObservation()" class="btn btn-ndvi" style="padding:3px 8px; font-size:11px;">+ Log Current</button>
+            </div>
+            <canvas id="phenologyChartCanvas" width="420" height="175" style="width:100%; height:175px; background:var(--surface); border-radius:8px; border:1px solid var(--card-border);"></canvas>
+          </div>
+
+          <div class="card">
+            <div class="section-label">
+              <span>R&D Observation Log</span>
+              <button onclick="downloadObservationsCSV()" class="btn btn-outline" style="padding:3px 8px; font-size:11px;">Export CSV</button>
+            </div>
+            <div class="table-container" style="max-height:175px;">
+              <table>
+                <thead>
+                  <tr><th>ID</th><th>Date</th><th>NDVI</th><th>RH%</th><th>GHG</th></tr>
+                </thead>
+                <tbody id="observationLogTbody" class="mono"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: TELEMETRY GAUGES & 10m SUB-PIXEL MATRIX -->
+      <div class="col-stack">
+
+        <!-- PARCEL METRICS HUD -->
+        <div class="card">
+          <div style="border-bottom:1px solid var(--card-border); padding-bottom:10px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span id="hudPlotId" class="badge badge-ndvi mono">WAG-01</span>
+              <span id="hudDistrict" class="badge mono">Pune District</span>
+            </div>
+            <h2 id="hudPlotName" style="font-size:16px; font-weight:800; line-height:1.2;">Wagholi North Sugarcane Belt</h2>
+            <p id="hudPlotMeta" style="font-size:11px; color:var(--text-muted); font-weight:600; margin-top:3px;">Crop: Sugarcane • 16.4 Ha • Deep Black Alluvial Soil</p>
+          </div>
+
+          <!-- 1. NDVI Crop Vigour -->
+          <div class="telemetry-card">
+            <div class="telemetry-header">
+              <span class="telemetry-title">1. NDVI Crop Vigour</span>
+              <span id="hudNdviVal" class="telemetry-val mono" style="color:var(--ndvi);">0.82</span>
+            </div>
+            <div class="progress-bar">
+              <div id="hudNdviBar" class="progress-fill" style="width:82%; background:var(--ndvi);"></div>
+            </div>
+            <div class="telemetry-meta mono">
+              <span id="hudNirRed">NIR: 0.56 | RED: 0.06</span>
+              <span id="hudNdviStatus" style="color:var(--ndvi);">Dense Canopy (0.6–0.9)</span>
+            </div>
+          </div>
+
+          <!-- 2. Surface Humidity & Soil Moisture -->
+          <div class="telemetry-card">
+            <div class="telemetry-header">
+              <span class="telemetry-title">2. Surface Humidity & Topsoil</span>
+              <span id="hudRhVal" class="telemetry-val mono" style="color:var(--water);">76% RH</span>
+            </div>
+            <div class="progress-bar">
+              <div id="hudRhBar" class="progress-fill" style="width:76%; background:var(--water);"></div>
+            </div>
+            <div class="telemetry-meta mono">
+              <span id="hudSoilMoisture">Topsoil (0-5cm): 41%</span>
+              <span id="hudTranspiration" style="color:var(--water);">Optimal Transpiration</span>
+            </div>
+          </div>
+
+          <!-- 3. Field GHG Emissions -->
+          <div class="telemetry-card" style="margin-bottom:0;">
+            <div class="telemetry-header">
+              <span class="telemetry-title">3. Field GHG Footprint</span>
+              <span id="hudGhgVal" class="telemetry-val mono" style="color:var(--ghg);">38.4 kg CO₂e</span>
+            </div>
+            <div class="progress-bar">
+              <div id="hudGhgBar" class="progress-fill" style="width:68%; background:var(--ghg);"></div>
+            </div>
+            <div class="telemetry-meta mono">
+              <span id="hudN2o">N₂O: 0.21kg</span>
+              <span id="hudCh4">CH₄: 1.65kg</span>
+              <span id="hudCo2Pure" style="color:var(--ghg);">CO₂: 26.8kg</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 10m x 10m SUB-PLOT LAND ZOOM MATRIX -->
+        <div class="card">
+          <div class="section-label" style="margin-bottom:2px;">
+            <span>10m × 10m Land Zoom Matrix</span>
+            <span class="badge mono" style="font-size:9px;">100 Ground Pixels</span>
+          </div>
+          <p style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">
+            Hover any 10m Sentinel-2 pixel to spot localized crop stress
+          </p>
+          <div id="pixelMatrixWrap" class="matrix-box"></div>
+          <div class="telemetry-card mono" style="margin-bottom:0; padding:10px;">
+            <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:800; margin-bottom:4px;">
+              <span id="subPixelLabel">Pixel [R5, C5] (10m×10m)</span>
+              <span id="subPixelVigour" style="color:var(--ndvi);">Vigorous</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
+              <span>NDVI: <b id="subPixelNdvi" style="color:var(--text);">0.82</b></span>
+              <span>RH: <b id="subPixelRh" style="color:var(--water);">76%</b></span>
+              <span>GHG: <b id="subPixelGhg" style="color:var(--ghg);">38.4kg</b></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- VIEW 2: PUNE PHOTO SCANNER & COMPUTER VISION                 -->
+    <!-- ============================================================= -->
+    <section id="view-photo" class="hidden">
+      <div class="browser-grid">
+        
+        <div class="card col-stack">
+          <h2 style="font-size:17px; font-weight:800;">📸 Pune Photo Locator & Spectral Scanner</h2>
+          <p style="font-size:12px; color:var(--text-muted);">
+            Upload any field or drone photo from Pune (or test instant samples below) to extract reflectance distributions and match to a Maharashtra sector.
+          </p>
+
+          <input id="photoFileInput" type="file" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)" />
+          <button onclick="document.getElementById('photoFileInput').click()" class="btn btn-ndvi" style="padding:14px; font-size:13px;">
+            📂 Upload Field Photo from Device
+          </button>
+
+          <div class="section-label" style="margin-top:8px;">
+            <span>Or Test Instant Pune Snapshots:</span>
+          </div>
+          <div class="grid-2">
+            <button onclick="loadSamplePhoto('WAGHOLI_CANE')" class="btn btn-outline">🌿 Wagholi Cane</button>
+            <button onclick="loadSamplePhoto('BHIMA_PADDY')" class="btn btn-outline">💧 Bhima Wet Paddy</button>
+            <button onclick="loadSamplePhoto('BAKORI_MILLET')" class="btn btn-outline">🌾 Bakori Millet</button>
+            <button onclick="loadSamplePhoto('LONIKAND_ONION')" class="btn btn-outline">🧅 Lonikand Onion</button>
+          </div>
+
+          <div class="telemetry-card" style="margin-top:10px; margin-bottom:0;">
+            <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:800; color:var(--text-muted); margin-bottom:4px;">
+              <span>MATCHED MAHARASHTRA SECTOR</span>
+              <span id="photoConfidenceBadge" class="mono" style="color:var(--ndvi); font-weight:800;">97.4% MATCH</span>
+            </div>
+            <div id="photoMatchTitle" style="font-size:15px; font-weight:800; margin-bottom:2px;">WAG-01: Wagholi North Sugarcane Belt</div>
+            <div id="photoMatchCrop" style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">Crop: Sugarcane • Deep Black Alluvial Soil</div>
+            <button onclick="jumpPhotoToLiveMap()" class="btn btn-ndvi" style="width:100%;">
+              Highlight Sector on Live Map ↗
+            </button>
+          </div>
+        </div>
+
+        <div class="card col-stack">
+          <div class="section-label">
+            <span>Computer-Vision Dual False-Color Analysis</span>
+            <span class="mono" style="color:var(--ndvi);">Matcha=Canopy • Slate=Water • Amber=Soil</span>
+          </div>
+          <div class="grid-2">
+            <div>
+              <div class="mono" style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">1. Original Field Photo</div>
+              <canvas id="photoSourceCanvas" width="280" height="210" style="width:100%; border-radius:10px; border:1px solid var(--card-border); background:#111;"></canvas>
+            </div>
+            <div>
+              <div class="mono" style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">2. False-Color NDVI/Moisture Mask</div>
+              <canvas id="photoHeatmapCanvas" width="280" height="210" style="width:100%; border-radius:10px; border:1px solid var(--card-border); background:#111;"></canvas>
+            </div>
+          </div>
+          <div class="grid-3 mono" style="text-align:center; background:var(--surface); padding:12px; border-radius:10px; font-size:12px; font-weight:700; border:1px solid var(--card-border);">
+            <div>Canopy Green: <span id="photoGreenPct" style="color:var(--ndvi);">78%</span></div>
+            <div>Bare Soil: <span id="photoSoilPct" style="color:var(--ghg);">14%</span></div>
+            <div>Surface Water: <span id="photoWaterPct" style="color:var(--water);">8%</span></div>
+          </div>
+        </div>
+
+        <div class="card col-stack">
+          <div class="section-label"><span>Scanned Field Telemetry Prediction</span></div>
+          <div class="telemetry-card">
+            <div style="font-size:12px; font-weight:800;">1. Predicted NDVI Crop Vigour</div>
+            <div id="photoNdviVal" class="mono" style="font-size:22px; font-weight:800; color:var(--ndvi); margin:6px 0;">0.81 (Vigorous)</div>
+            <div style="font-size:11px; color:var(--text-muted);">Strong NIR reflection & active red chlorophyll absorption.</div>
+          </div>
+          <div class="telemetry-card">
+            <div style="font-size:12px; font-weight:800;">2. Surface Humidity & Soil Moisture</div>
+            <div id="photoRhVal" class="mono" style="font-size:22px; font-weight:800; color:var(--water); margin:6px 0;">75% RH | 40% Soil</div>
+            <div style="font-size:11px; color:var(--text-muted);">Optimal transpiration & root-zone topsoil moisture.</div>
+          </div>
+          <div class="telemetry-card" style="margin-bottom:0;">
+            <div style="font-size:12px; font-weight:800;">3. Field GHG Emissions</div>
+            <div id="photoGhgVal" class="mono" style="font-size:22px; font-weight:800; color:var(--ghg); margin:6px 0;">37.8 kg CO₂e/ha/d</div>
+            <div id="photoGhgBreakdown" class="mono" style="font-size:11px; font-weight:700; color:var(--text-muted);">N₂O: 0.21kg | CH₄: 1.62kg | CO₂: 26.4kg</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- VIEW 3: MAHARASHTRA 152+ SECTOR DATABASE                     -->
+    <!-- ============================================================= -->
+    <section id="view-database" class="hidden">
+      <div class="card col-stack">
+        
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
+          <div>
+            <h2 style="font-size:18px; font-weight:800;">Maharashtra 152-Sector Agricultural Telemetry Database</h2>
+            <p style="font-size:12px; color:var(--text-muted);">Covering Wagholi, Pune District, Paschim Maharashtra, Nashik, Marathwada, Vidarbha, and Konkan.</p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <input id="dbSearchInput" type="text" placeholder="Search sector, crop, district..." oninput="renderDatabaseTable()" class="input" style="max-width:260px;" />
+            <button onclick="downloadDatabaseCSV()" class="btn btn-outline">Export CSV</button>
+            <button onclick="downloadGeoJSON()" class="btn btn-ndvi">Export GeoJSON</button>
+          </div>
+        </div>
+
+        <!-- SUMMARY STATS -->
+        <div class="grid-3">
+          <div class="telemetry-card" style="margin:0;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:700;">TOTAL MONITORED SECTORS</div>
+            <div id="dbStatTotalCount" class="mono" style="font-size:24px; font-weight:800; color:var(--ndvi); margin-top:4px;">152</div>
+          </div>
+          <div class="telemetry-card" style="margin:0;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:700;">TOTAL MONITORED ACREAGE</div>
+            <div id="dbStatTotalArea" class="mono" style="font-size:24px; font-weight:800; color:var(--water); margin-top:4px;">3,240 Ha</div>
+          </div>
+          <div class="telemetry-card" style="margin:0;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:700;">AVG MAHARASHTRA PEAK NDVI</div>
+            <div id="dbStatAvgNdvi" class="mono" style="font-size:24px; font-weight:800; color:var(--ghg); margin-top:4px;">0.74</div>
+          </div>
+        </div>
+
+        <div class="table-container" style="max-height:520px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Sector Name</th>
+                <th>Division</th>
+                <th>District</th>
+                <th>Crop</th>
+                <th>Area (Ha)</th>
+                <th>Soil Type</th>
+                <th>NDVI</th>
+                <th>Humidity</th>
+                <th>GHG (CO₂e)</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="fullDatabaseTableBody" class="mono"></tbody>
+          </table>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- VIEW 4: NDVI FORMULA LAB & SPECTRAL SIMULATOR               -->
+    <!-- ============================================================= -->
+    <section id="view-simulator" class="hidden">
+      <div class="card" style="max-width:820px; margin:0 auto;">
+        
+        <h2 style="font-size:18px; font-weight:800; margin-bottom:6px;">
+          Multispectral Formula Lab: NDVI = (NIR − Red) / (NIR + Red)
+        </h2>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+          Sentinel-2 monitors reflectance across 13 spectral bands. Healthy vegetation strongly absorbs visible Red light (Band 4, 665nm) for chlorophyll photosynthesis and strongly reflects Near-Infrared (Band 8, 842nm) through spongey leaf mesophyll scattering.
+        </p>
+
+        <!-- SPECTRAL SPECTRUM BAR -->
+        <div style="margin-bottom:16px;">
+          <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:800; color:var(--text-muted); margin-bottom:4px;">
+            <span>400nm (Blue B2)</span>
+            <span>560nm (Green B3)</span>
+            <span>665nm (Red B4)</span>
+            <span>842nm (NIR B8)</span>
+            <span>1610nm (SWIR B11)</span>
+          </div>
+          <div style="height:14px; border-radius:99px; background:linear-gradient(90deg, #3b82f6 0%, #10b981 25%, #ef4444 50%, #8b5cf6 75%, #f59e0b 100%);"></div>
+        </div>
+
+        <!-- NIR SLIDER -->
+        <div class="telemetry-card">
+          <div class="telemetry-header">
+            <span>Near-Infrared Reflectance (NIR — Band 8, 842nm)</span>
+            <span id="simNirVal" class="mono" style="color:var(--ndvi); font-size:16px;">0.70 (70%)</span>
+          </div>
+          <input id="simNirSlider" type="range" min="0.05" max="0.95" step="0.01" value="0.70" oninput="recomputeSimulator()" style="width:100%; accent-color:var(--ndvi);" />
+        </div>
+
+        <!-- RED SLIDER -->
+        <div class="telemetry-card">
+          <div class="telemetry-header">
+            <span>Visible Red Reflectance (RED — Band 4, 665nm)</span>
+            <span id="simRedVal" class="mono" style="color:var(--ghg); font-size:16px;">0.10 (10%)</span>
+          </div>
+          <input id="simRedSlider" type="range" min="0.05" max="0.95" step="0.01" value="0.10" oninput="recomputeSimulator()" style="width:100%; accent-color:var(--ghg);" />
+        </div>
+
+        <!-- RESULT CARD -->
+        <div id="simResultCard" class="telemetry-card mono" style="font-size:14px; font-weight:800; color:var(--ndvi); border-color:var(--ndvi); background:var(--ndvi-light);">
+          NDVI = (0.70 - 0.10) / (0.70 + 0.10) = 0.75 → Dense, Healthy Crop Canopy (0.60 to 0.90)
+        </div>
+
+        <!-- OTHER INDICES -->
+        <div class="grid-3" style="margin-top:12px;">
+          <div class="telemetry-card" style="margin:0;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:800;">SAVI (Soil-Adjusted)</div>
+            <div id="simSaviVal" class="mono" style="font-size:18px; font-weight:800; color:var(--ndvi); margin-top:4px;">0.64</div>
+          </div>
+          <div class="telemetry-card" style="margin:0;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:800;">NDMI (Moisture Index)</div>
+            <div id="simNdmiVal" class="mono" style="font-size:18px; font-weight:800; color:var(--water); margin-top:4px;">0.55</div>
+          </div>
+          <div class="telemetry-card" style="margin:0;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:800;">NDWI (Water Index)</div>
+            <div id="simNdwiVal" class="mono" style="font-size:18px; font-weight:800; color:var(--ghg); margin-top:4px;">-0.65</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- VIEW 5: 6-SECTION SCIENCE FAIR / R&D BOARD                   -->
+    <!-- ============================================================= -->
+    <section id="view-board" class="hidden">
+      <div class="grid-3">
+        
+        <div class="card">
+          <div class="section-label"><span class="badge badge-ndvi mono">SECTION 1</span></div>
+          <h3 style="font-size:15px; font-weight:800; margin-bottom:8px;">1. ESA Copernicus Satellite Constellation</h3>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+            The European Space Agency's Sentinel-2A and 2B twin satellites provide multispectral optical imagery with a 5-day revisit cycle and 10-meter ground resolution. This allows real-time, non-destructive monitoring of crop vigour, moisture dynamics, and localized stress across Maharashtra's 36 districts.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="section-label"><span class="badge badge-ndvi mono">SECTION 2</span></div>
+          <h3 style="font-size:15px; font-weight:800; margin-bottom:8px;">2. NDVI Crop Vigour & Biophysics</h3>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+            Chlorophyll actively absorbs Red light (Band 4) for photosynthesis while spongey leaf mesophyll reflects Near-Infrared (Band 8). The normalized formula \((NIR - Red)/(NIR + Red)\) produces values from -1.0 to +1.0. Values between 0.60–0.90 signify dense, vigorous crop canopy.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="section-label"><span class="badge badge-water mono">SECTION 3</span></div>
+          <h3 style="font-size:15px; font-weight:800; margin-bottom:8px;">3. Surface Humidity & Soil Moisture</h3>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+            Canopy boundary humidity controls plant evapotranspiration and fungal disease risk (powdery mildew / downy mildew). Synchronizing topsoil moisture (0–5 cm) with short-wave infrared (SWIR Band 11) prevents water stress and guides precision drip scheduling.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="section-label"><span class="badge badge-ghg mono">SECTION 4</span></div>
+          <h3 style="font-size:15px; font-weight:800; margin-bottom:8px;">4. Agricultural GHG Emissions (IPCC Tier-1/2)</h3>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+            Quantifies field greenhouse gas fluxes: Nitrous Oxide (\(N_2O\), GWP 273x) from synthetic nitrogen fertilization, Methane (\(CH_4\), GWP 28x) from flooded anaerobic rice paddies along river basins, and Carbon Dioxide (\(CO_2\)) from soil respiration.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="section-label"><span class="badge badge-ndvi mono">SECTION 5</span></div>
+          <h3 style="font-size:15px; font-weight:800; margin-bottom:8px;">5. Multi-Date Phenology Growth Curves</h3>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+            Tracking the Day of Year (DOY) phenology reveals crop trajectory: starting low at Pre-Sowing (DOY 102), rising during Jointing (DOY 169), peaking at Tasseling/Reproduction (DOY 205), and steadily decreasing toward Maturity (DOY 251) and Harvest (DOY 287).
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="section-label"><span class="badge badge-water mono">SECTION 6</span></div>
+          <h3 style="font-size:15px; font-weight:800; margin-bottom:8px;">6. Climate-Smart Precision Interventions</h3>
+          <p style="font-size:12px; color:var(--text-muted); line-height:1.6;">
+            Satellite telemetry empowers precision dosing: Variable-Rate Nitrogen Fertigation (VRF) to curb \(N_2O\), Alternate Wetting and Drying (AWD) in rice paddies to slash \(CH_4\) by up to 48%, and root-zone drip targeting for water conservation.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- EXPORT MODAL -->
+  <div id="exportModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeExportModal()">
+    <div class="modal-box">
+      <h3 style="font-size:18px; font-weight:800; margin-bottom:8px;">⬇ Export Maharashtra GIS & Telemetry Data</h3>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+        Download the complete 152+ farmland sector dataset for GIS analysis in QGIS, ArcGIS, Google Earth, or spreadsheet tools.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button onclick="downloadGeoJSON()" class="btn btn-ndvi" style="padding:12px; justify-content:space-between;">
+          <span>🌍 Download GIS GeoJSON (QGIS / ArcGIS / Leaflet)</span>
+          <span class="mono">.geojson</span>
+        </button>
+        <button onclick="downloadDatabaseCSV()" class="btn btn-outline" style="padding:12px; justify-content:space-between;">
+          <span>📊 Download Tabular CSV (Excel / Pandas)</span>
+          <span class="mono">.csv</span>
+        </button>
+        <button onclick="downloadStandaloneAppFile()" class="btn btn-dark" style="padding:12px; justify-content:space-between;">
+          <span>💾 Download Standalone Offline App File</span>
+          <span class="mono">.html</span>
+        </button>
+      </div>
+      <div style="text-align:right; margin-top:16px;">
+        <button onclick="closeExportModal()" class="btn btn-outline">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // -------------------------------------------------------------
+    // 1. DATA CONSTANTS & PHENOLOGY STAGES
+    // -------------------------------------------------------------
+    const SEASON_STAGES = [
+      { index: 0, date: '2026-04-12', doy: 102, name: 'Pre-Sowing / Fallow', ndviFactor: 0.28, rhDelta: -16, emissionFactor: 0.48 },
+      { index: 1, date: '2026-05-24', doy: 144, name: 'Early Emergence', ndviFactor: 0.50, rhDelta: -7, emissionFactor: 0.68 },
+      { index: 2, date: '2026-06-18', doy: 169, name: 'Jointing Stage', ndviFactor: 0.82, rhDelta: +2, emissionFactor: 0.90 },
+      { index: 3, date: '2026-07-24', doy: 205, name: 'Tasseling (Peak Vigour)', ndviFactor: 1.00, rhDelta: +7, emissionFactor: 1.00 },
+      { index: 4, date: '2026-09-08', doy: 251, name: 'Maturity Stage', ndviFactor: 0.76, rhDelta: +2, emissionFactor: 0.80 },
+      { index: 5, date: '2026-10-14', doy: 287, name: 'Post-Harvest Stubble', ndviFactor: 0.34, rhDelta: -6, emissionFactor: 0.52 }
+    ];
+
+    const HUBS = {
+      PUNE_CORE: { lat: 18.5800, lng: 74.0000, zoom: 13 },
+      PASCHIM: { lat: 17.2500, lng: 74.3500, zoom: 9 },
+      NASHIK: { lat: 20.2500, lng: 74.4000, zoom: 9 },
+      MARATHWADA: { lat: 19.1000, lng: 76.3000, zoom: 8 },
+      VIDARBHA: { lat: 20.8000, lng: 78.2000, zoom: 8 },
+      KONKAN: { lat: 17.8000, lng: 73.3000, zoom: 9 },
+      ALL: { lat: 19.2000, lng: 75.8000, zoom: 7 }
+    };
+
+    function makePolygon(lat, lng, dLat = 0.0040, dLng = 0.0055, skew = 0.0008) {
+      return [
+        [lat + dLat, lng - dLng + skew],
+        [lat + dLat + skew, lng + dLng],
+        [lat - dLat, lng + dLng - skew],
+        [lat - dLat - skew, lng - dLng]
+      ];
+    }
+
+    // 152-Sector Dataset
+    let AGRICULTURAL_DATABASE = [
+      { id: 'WAG-01', hub: 'PUNE_CORE', district: 'Pune', name: 'Wagholi North Sugarcane Belt', crop: 'Sugarcane', area: 16.4, soil: 'Deep Black Alluvial', lat: 18.5960, lng: 73.9760, peakNdvi: 0.82, baseRh: 76, baseCo2: 38.4, baseCh4: 1.65, baseN2o: 0.21 },
+      { id: 'WAG-02', hub: 'PUNE_CORE', district: 'Pune', name: 'Wagholi South Bajra Dryland', crop: 'Pearl Millet (Bajra)', area: 11.2, soil: 'Medium Black Vertisol', lat: 18.5650, lng: 73.9810, peakNdvi: 0.56, baseRh: 53, baseCo2: 19.2, baseCh4: 0.42, baseN2o: 0.11 },
+      { id: 'WAG-03', hub: 'PUNE_CORE', district: 'Pune', name: 'Kesnand Sorghum & Fodder Plot', crop: 'Jowar (Sorghum)', area: 14.8, soil: 'Calcareous Loam', lat: 18.5730, lng: 74.0080, peakNdvi: 0.68, baseRh: 63, baseCo2: 24.5, baseCh4: 0.68, baseN2o: 0.14 },
+      { id: 'WAG-04', hub: 'PUNE_CORE', district: 'Pune', name: 'Lonikand Irrigated Red Onion', crop: 'Red Onion & Wheat', area: 19.0, soil: 'Silty Clay Loam', lat: 18.6150, lng: 74.0190, peakNdvi: 0.74, baseRh: 69, baseCo2: 28.9, baseCh4: 0.88, baseN2o: 0.16 },
+      { id: 'WAG-05', hub: 'PUNE_CORE', district: 'Pune', name: 'Bhima Riverbank Wet Paddy', crop: 'Paddy (Flooded Rice)', area: 22.5, soil: 'Hydromorphic Alluvial', lat: 18.5990, lng: 74.0410, peakNdvi: 0.86, baseRh: 84, baseCo2: 49.6, baseCh4: 3.15, baseN2o: 0.28 },
+      { id: 'WAG-06', hub: 'PUNE_CORE', district: 'Pune', name: 'Bakori Hill Pomegranate & Gram', crop: 'Pomegranate', area: 13.6, soil: 'Gravelly Loam', lat: 18.5530, lng: 74.0190, peakNdvi: 0.52, baseRh: 50, baseCo2: 17.8, baseCh4: 0.35, baseN2o: 0.09 },
+      { id: 'WAG-07', hub: 'PUNE_CORE', district: 'Pune', name: 'Wadebolhai Soybean & Tur Belt', crop: 'Soybean', area: 18.2, soil: 'Medium Vertisol', lat: 18.5620, lng: 74.0510, peakNdvi: 0.71, baseRh: 66, baseCo2: 25.1, baseCh4: 0.62, baseN2o: 0.15 },
+      { id: 'WAG-08', hub: 'PUNE_CORE', district: 'Pune', name: 'Avhalwadi Vegetable Cluster', crop: 'Leafy Vegetables', area: 9.4, soil: 'Loamy Black', lat: 18.5800, lng: 73.9580, peakNdvi: 0.69, baseRh: 67, baseCo2: 26.4, baseCh4: 0.74, baseN2o: 0.14 },
+      { id: 'WAG-09', hub: 'PUNE_CORE', district: 'Pune', name: 'Manjari VSI Experimental Cane', crop: 'Sugarcane', area: 25.0, soil: 'Heavy Black Cotton', lat: 18.5350, lng: 73.9820, peakNdvi: 0.85, baseRh: 79, baseCo2: 40.2, baseCh4: 1.78, baseN2o: 0.22 },
+      { id: 'WAG-10', hub: 'PUNE_CORE', district: 'Pune', name: 'Loni Kalbhor Canal Maize & Grape', crop: 'Sweet Corn', area: 21.0, soil: 'Alluvial Loam', lat: 18.5250, lng: 74.0220, peakNdvi: 0.77, baseRh: 72, baseCo2: 31.5, baseCh4: 1.05, baseN2o: 0.18 }
+    ];
+
+    const SEED_DIVISIONS = [
+      { hub: 'PUNE_CORE', prefix: 'PUN', dist: 'Pune', count: 22, baseLat: 18.59, baseLng: 74.02, spread: 0.09, crops: ['Sugarcane', 'Indrayani Paddy', 'Red Onion', 'Hybrid Tomato', 'Purandar Fig'] },
+      { hub: 'PASCHIM', prefix: 'PAS', dist: 'Satara/Sangli/Kolhapur', count: 25, baseLat: 17.25, baseLng: 74.35, spread: 0.55, crops: ['Adsali Sugarcane', 'Satara Turmeric', 'Export Grapes', 'Rabi Jowar', 'Soybean'] },
+      { hub: 'NASHIK', prefix: 'NAS', dist: 'Nashik/Jalgaon', count: 25, baseLat: 20.25, baseLng: 74.40, spread: 0.55, crops: ['Wine & Table Grapes', 'Lasalgaon Onion', 'Jalgaon Banana', 'Cotton', 'Pomegranate'] },
+      { hub: 'MARATHWADA', prefix: 'MAR', dist: 'Sambhajinagar/Latur', count: 25, baseLat: 19.10, baseLng: 76.30, spread: 0.60, crops: ['Soybean & Tur', 'Bt Cotton', 'Sweet Lime (Mosambi)', 'Rabi Sorghum', 'Chickpea'] },
+      { hub: 'VIDARBHA', prefix: 'VID', dist: 'Nagpur/Amravati', count: 25, baseLat: 20.80, baseLng: 78.20, spread: 0.65, crops: ['Nagpur Mandarin Orange', 'Cotton', 'Paddy (Wainganga)', 'Soybean', 'Wheat'] },
+      { hub: 'KONKAN', prefix: 'KON', dist: 'Ratnagiri/Raigad', count: 20, baseLat: 17.80, baseLng: 73.30, spread: 0.50, crops: ['Coastal Kharif Paddy', 'Alphonso Mango', 'Cashew & Coconut', 'Finger Millet (Nachni)'] }
+    ];
+
+    SEED_DIVISIONS.forEach(reg => {
+      for (let i = 1; i <= reg.count; i++) {
+        const angle = i * 2.39996;
+        const radius = Math.sqrt(i / reg.count) * reg.spread;
+        const lat = +(reg.baseLat + Math.sin(angle) * radius).toFixed(4);
+        const lng = +(reg.baseLng + Math.cos(angle) * radius).toFixed(4);
+        const crop = reg.crops[i % reg.crops.length];
+        const isWet = crop.includes('Paddy') || crop.includes('Cane') || crop.includes('Banana');
+        AGRICULTURAL_DATABASE.push({
+          id: `${reg.prefix}-${String(i).padStart(2, '0')}`,
+          hub: reg.hub,
+          district: reg.dist.split('/')[0],
+          name: `${reg.dist.split('/')[0]} Sector #${i} (${crop})`,
+          crop: crop,
+          area: +(12 + (i * 3.7) % 28).toFixed(1),
+          soil: isWet ? 'Deep Alluvial Clay' : 'Medium Black Vertisol',
+          lat, lng,
+          peakNdvi: isWet ? +(0.74 + (i % 14) * 0.01).toFixed(2) : +(0.45 + (i % 26) * 0.01).toFixed(2),
+          baseRh: isWet ? 74 + (i % 12) : 50 + (i % 18),
+          baseCo2: isWet ? +(34 + (i % 15)).toFixed(1) : +(19 + (i % 12)).toFixed(1),
+          baseCh4: isWet ? +(1.45 + (i % 8) * 0.2).toFixed(2) : +(0.38 + (i % 5) * 0.1).toFixed(2),
+          baseN2o: +(0.12 + (i % 6) * 0.02).toFixed(2)
+        });
+      }
+    });
+
+    AGRICULTURAL_DATABASE.forEach((p, idx) => {
+      const isRegional = p.hub !== 'PUNE_CORE';
+      const baseSz = isRegional ? 0.015 : 0.0042;
+      p.coords = makePolygon(p.lat, p.lng, baseSz, baseSz * 1.3, ((idx % 5) - 2) * (baseSz * 0.15));
+    });
+
+    // -------------------------------------------------------------
+    // 2. STATE MANAGEMENT
+    // -------------------------------------------------------------
+    let currentSpectralLayer = 'NDVI';
+    let currentStageIndex = 3;
+    let selectedSector = AGRICULTURAL_DATABASE[0];
+    let observationList = [];
+    let currentPhotoMatchedSector = AGRICULTURAL_DATABASE[0];
+
+    // Leaflet Real Map Objects
+    let map = null;
+    let currentTileLayer = null;
+    let referenceLayer = null;
+    let polygonFeatureGroup = null;
+    let polygonLayerMap = {}; // ID -> L.polygon reference
+
+    const TILE_SERVERS = {
+      satellite: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles &copy; Esri &mdash; Maxar, Earthstar Geographics',
+        maxZoom: 19
+      },
+      hybrid: {
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        referenceUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        attribution: 'Tiles &copy; Esri &mdash; Maxar & Boundaries',
+        maxZoom: 19
+      },
+      streets: {
+        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
+      },
+      dark: {
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        attribution: '&copy; CartoDB & OpenStreetMap',
+        maxZoom: 19
+      }
+    };
+
+    function computeSectorMetrics(sector, stageIdx = currentStageIndex) {
+      const st = SEASON_STAGES[stageIdx] || SEASON_STAGES[3];
+      const ndvi = Math.max(0.05, Math.min(0.92, +(sector.peakNdvi * st.ndviFactor).toFixed(2)));
+      const sum = 0.62;
+      const nir = +(((ndvi + 1) * sum) / 2).toFixed(2);
+      const red = +(sum - nir).toFixed(2);
+      const rh = Math.max(24, Math.min(96, Math.round(sector.baseRh + st.rhDelta)));
+      const soilMoisture = Math.round(rh * 0.54);
+      const co2Total = +(sector.baseCo2 * st.emissionFactor).toFixed(1);
+      const ch4 = +(sector.baseCh4 * st.emissionFactor).toFixed(2);
+      const n2o = +(co2Total * 0.0055).toFixed(2);
+      const co2Pure = +(co2Total * 0.70).toFixed(1);
+      return { ndvi, nir, red, rh, soilMoisture, co2: co2Total, ch4, n2o, co2Pure, date: st.date, stageName: st.name };
+    }
+
+    // Color scales
+    function getNdviColor(ndvi) {
+      if (ndvi >= 0.70) return '#10b981'; // vigorous emerald
+      if (ndvi >= 0.50) return '#34d399';
+      if (ndvi >= 0.35) return '#84cc16';
+      if (ndvi >= 0.20) return '#eab308';
+      return '#b45309'; // bare soil
+    }
+
+    function getHumidityColor(rh) {
+      if (rh >= 78) return '#0284c7';
+      if (rh >= 62) return '#38bdf8';
+      if (rh >= 50) return '#7dd3fc';
+      return '#f59e0b';
+    }
+
+    function getEmissionColor(co2) {
+      if (co2 >= 38) return '#ef4444';
+      if (co2 >= 26) return '#f59e0b';
+      return '#10b981';
+    }
+
+    function getSectorFillColor(sector) {
+      const m = computeSectorMetrics(sector, currentStageIndex);
+      if (currentSpectralLayer === 'HUMIDITY') return getHumidityColor(m.rh);
+      if (currentSpectralLayer === 'EMISSION') return getEmissionColor(m.co2);
+      if (currentSpectralLayer === 'RGB') return '#2e7d32';
+      return getNdviColor(m.ndvi);
+    }
+
+    // -------------------------------------------------------------
+    // 3. REAL LEAFLET SATELLITE MAP INITIALIZATION & RENDERING
+    // -------------------------------------------------------------
+    function initRealLeafletMap() {
+      // Default to Wagholi / Pune
+      map = L.map('leafletMap', {
+        center: [18.5800, 74.0000],
+        zoom: 13,
+        zoomControl: true,
+        attributionControl: true
+      });
+
+      // Initialize with High-Resolution Esri World Imagery (Satellite)
+      setBasemap('satellite');
+
+      // Add feature group for all 152 farmland sectors
+      polygonFeatureGroup = L.featureGroup().addTo(map);
+
+      // Render all 152 sector polygons
+      renderAllSectorPolygons();
+
+      // Mousemove coordinates tracking
+      map.on('mousemove', (e) => {
+        document.getElementById('coordinatesText').textContent = 
+          `${e.latlng.lat.toFixed(4)}°N, ${e.latlng.lng.toFixed(4)}°E • Zoom: ${map.getZoom()}`;
+      });
+
+      map.on('zoomend', () => {
+        const center = map.getCenter();
+        document.getElementById('coordinatesText').textContent = 
+          `${center.lat.toFixed(4)}°N, ${center.lng.toFixed(4)}°E • Zoom: ${map.getZoom()}`;
+      });
+
+      // Fit Wagholi view initially
+      selectFarmlandSector('WAG-01', true);
+    }
+
+    function setBasemap(type) {
+      const cfg = TILE_SERVERS[type] || TILE_SERVERS.satellite;
+
+      if (currentTileLayer) map.removeLayer(currentTileLayer);
+      if (referenceLayer) { map.removeLayer(referenceLayer); referenceLayer = null; }
+
+      currentTileLayer = L.tileLayer(cfg.url, {
+        attribution: cfg.attribution,
+        maxZoom: cfg.maxZoom,
+        crossOrigin: true
+      }).addTo(map);
+
+      if (cfg.referenceUrl) {
+        referenceLayer = L.tileLayer(cfg.referenceUrl, {
+          maxZoom: cfg.maxZoom,
+          pane: 'overlayPane',
+          crossOrigin: true
+        }).addTo(map);
+      }
+
+      ['satellite', 'hybrid', 'streets', 'dark'].forEach(b => {
+        const btn = document.getElementById(`bm-${b}`);
+        if (btn) btn.classList.toggle('active', b === type);
+      });
+    }
+
+    function renderAllSectorPolygons() {
+      if (!map || !polygonFeatureGroup) return;
+      polygonFeatureGroup.clearLayers();
+      polygonLayerMap = {};
+
+      AGRICULTURAL_DATABASE.forEach(sector => {
+        const fillColor = getSectorFillColor(sector);
+        const isSelected = selectedSector && selectedSector.id === sector.id;
+
+        const polygon = L.polygon(sector.coords, {
+          color: isSelected ? '#ffffff' : fillColor,
+          weight: isSelected ? 3.5 : 1.8,
+          fillColor: fillColor,
+          fillOpacity: isSelected ? 0.85 : 0.65,
+          className: `sector-poly-${sector.id}`
+        });
+
+        // Interactive Popup & Tooltip
+        const metrics = computeSectorMetrics(sector, currentStageIndex);
+        const popupContent = `
+          <div style="min-width:180px; font-family:'Plus Jakarta Sans',sans-serif;">
+            <div class="custom-popup-title">${sector.id}: ${sector.name}</div>
+            <div class="custom-popup-sub">${sector.crop} • ${sector.area} Ha • ${sector.district}</div>
+            <div class="custom-popup-stats">
+              <span style="color:#10b981;">NDVI: ${metrics.ndvi}</span>
+              <span style="color:#38bdf8;">RH: ${metrics.rh}%</span>
+              <span style="color:#f59e0b;">GHG: ${metrics.co2}kg</span>
+            </div>
+            <button onclick="selectFarmlandSector('${sector.id}', false); map.closePopup();" class="btn btn-ndvi" style="width:100%; padding:5px 8px; font-size:10.5px;">
+              Inspect Telemetry HUD ↗
+            </button>
+          </div>
+        `;
+        polygon.bindPopup(popupContent);
+
+        // Tooltip on Hover
+        polygon.bindTooltip(`<b>${sector.id}</b>: ${sector.crop} (NDVI: ${metrics.ndvi})`, {
+          sticky: true,
+          direction: 'top',
+          className: 'mono'
+        });
+
+        // Hover events
+        polygon.on('mouseover', () => {
+          if (selectedSector && selectedSector.id === sector.id) return;
+          polygon.setStyle({
+            weight: 3,
+            color: '#ffffff',
+            fillOpacity: 0.82
+          });
+        });
+
+        polygon.on('mouseout', () => {
+          if (selectedSector && selectedSector.id === sector.id) return;
+          polygon.setStyle({
+            weight: 1.8,
+            color: getSectorFillColor(sector),
+            fillOpacity: 0.65
+          });
+        });
+
+        // Click event
+        polygon.on('click', () => {
+          selectFarmlandSector(sector.id, false);
+        });
+
+        polygonFeatureGroup.addLayer(polygon);
+        polygonLayerMap[sector.id] = polygon;
+      });
+    }
+
+    function updatePolygonStyles() {
+      AGRICULTURAL_DATABASE.forEach(sector => {
+        const poly = polygonLayerMap[sector.id];
+        if (!poly) return;
+        const fillColor = getSectorFillColor(sector);
+        const isSelected = selectedSector && selectedSector.id === sector.id;
+
+        poly.setStyle({
+          color: isSelected ? '#ffffff' : fillColor,
+          weight: isSelected ? 3.5 : 1.8,
+          fillColor: fillColor,
+          fillOpacity: isSelected ? 0.85 : 0.65
+        });
+
+        const metrics = computeSectorMetrics(sector, currentStageIndex);
+        poly.setTooltipContent(`<b>${sector.id}</b>: ${sector.crop} (NDVI: ${metrics.ndvi})`);
+      });
+    }
+
+    function fitAllMaharashtra() {
+      if (polygonFeatureGroup && polygonFeatureGroup.getLayers().length > 0) {
+        map.fitBounds(polygonFeatureGroup.getBounds(), { padding: [30, 30], duration: 1.2 });
+      }
+    }
+
+    function resetWagholiView() {
+      document.getElementById('hubSelector').value = 'PUNE_CORE';
+      flyToDivision('PUNE_CORE');
+      selectFarmlandSector('WAG-01', true);
+    }
+
+    function zoomToCurrentPlot() {
+      if (!selectedSector || !map) return;
+      map.flyTo([selectedSector.lat, selectedSector.lng], 16, { duration: 1.2 });
+      const poly = polygonLayerMap[selectedSector.id];
+      if (poly) poly.openPopup();
+    }
+
+    function flyToDivision(hubKey) {
+      const h = HUBS[hubKey] || HUBS.PUNE_CORE;
+      if (map) {
+        map.flyTo([h.lat, h.lng], h.zoom, { duration: 1.5 });
+      }
+      renderSectorsSidebar();
+    }
+
+    function scanViewportParcels() {
+      if (!map) return;
+      const center = map.getCenter();
+      const id = `SCAN-${AGRICULTURAL_DATABASE.length + 1}`;
+      const lat = center.lat + (Math.random() * 0.006 - 0.003);
+      const lng = center.lng + (Math.random() * 0.006 - 0.003);
+
+      const newPlot = {
+        id,
+        hub: document.getElementById('hubSelector').value || 'PUNE_CORE',
+        district: 'Viewport Auto-Scan',
+        name: `Scanned Field (${lat.toFixed(3)}°N, ${lng.toFixed(3)}°E)`,
+        crop: 'Irrigated Precision Crop',
+        area: 16.5,
+        soil: 'Alluvial Vertisol',
+        lat, lng,
+        peakNdvi: 0.79,
+        baseRh: 74,
+        baseCo2: 33.2,
+        baseCh4: 1.25,
+        baseN2o: 0.19,
+        coords: makePolygon(lat, lng, 0.0042, 0.0055, 0.0006)
+      };
+
+      AGRICULTURAL_DATABASE.unshift(newPlot);
+      document.getElementById('headerSectorCountBadge').textContent = `${AGRICULTURAL_DATABASE.length} SECTORS`;
+      document.getElementById('tabCount').textContent = AGRICULTURAL_DATABASE.length;
+      
+      renderAllSectorPolygons();
+      renderSectorsSidebar();
+      selectFarmlandSector(id, true);
+      document.getElementById('mapStatusText').textContent = `Auto-scanned & ingested new parcel ${id} on satellite map`;
+    }
+
+    // -------------------------------------------------------------
+    // 4. TELEMETRY, MATRIX & SIDEBAR CONTROLS
+    // -------------------------------------------------------------
+    function selectFarmlandSector(sectorId, fly = true) {
+      const found = AGRICULTURAL_DATABASE.find(p => p.id === sectorId);
+      if (!found) return;
+      selectedSector = found;
+
+      if (fly && map) {
+        map.flyTo([found.lat, found.lng], found.hub === 'PUNE_CORE' ? 15 : 12, { duration: 1.2 });
+      }
+
+      // Update polygon highlight
+      updatePolygonStyles();
+      const poly = polygonLayerMap[found.id];
+      if (poly && fly) {
+        setTimeout(() => poly.openPopup(), 600);
+      }
+
+      updateHudDisplay();
+      renderSectorsSidebar();
+      drawPhenologyChart();
+      renderSubPixelMatrix();
+      fetchLiveWeather(found.district);
+    }
+
+    function setSpectralMode(layer) {
+      currentSpectralLayer = layer;
+      document.getElementById('activeLayerLabel').textContent = layer;
+      ['NDVI', 'HUMIDITY', 'EMISSION', 'RGB'].forEach(l => {
+        const card = document.getElementById(`layerCard-${l}`);
+        if (card) {
+          card.classList.toggle('active', l === layer);
+          card.classList.toggle('water-mode', layer === 'HUMIDITY');
+          card.classList.toggle('ghg-mode', layer === 'EMISSION');
+        }
+      });
+      updatePolygonStyles();
+      renderLegend();
+      renderSubPixelMatrix();
+    }
+
+    function changeSeason(val) {
+      currentStageIndex = parseInt(val, 10);
+      document.getElementById('stageSelect').value = currentStageIndex;
+      document.getElementById('stageRange').value = currentStageIndex;
+      document.getElementById('stageBadge').textContent = `DOY ${SEASON_STAGES[currentStageIndex].doy}`;
+      updatePolygonStyles();
+      renderSectorsSidebar();
+      updateHudDisplay();
+      drawPhenologyChart();
+      renderSubPixelMatrix();
+    }
+
+    function updateHudDisplay() {
+      const m = computeSectorMetrics(selectedSector, currentStageIndex);
+      document.getElementById('hudPlotId').textContent = selectedSector.id;
+      document.getElementById('hudDistrict').textContent = `${selectedSector.district} District`;
+      document.getElementById('hudPlotName').textContent = selectedSector.name;
+      document.getElementById('hudPlotMeta').textContent = `Crop: ${selectedSector.crop} • ${selectedSector.area} Ha • ${selectedSector.soil}`;
+
+      // NDVI
+      document.getElementById('hudNdviVal').textContent = m.ndvi.toFixed(2);
+      document.getElementById('hudNdviBar').style.width = `${Math.round(m.ndvi * 100)}%`;
+      document.getElementById('hudNirRed').textContent = `NIR: ${m.nir} | RED: ${m.red}`;
+      document.getElementById('hudNdviStatus').textContent = m.ndvi >= 0.70 ? 'High-Vigour Canopy (0.7–0.9)' : (m.ndvi >= 0.40 ? 'Moderate Growth (0.4–0.7)' : 'Sparse Canopy (< 0.4)');
+
+      // Moisture
+      document.getElementById('hudRhVal').textContent = `${m.rh}% RH`;
+      document.getElementById('hudRhBar').style.width = `${m.rh}%`;
+      document.getElementById('hudSoilMoisture').textContent = `Topsoil (0-5cm): ${m.soilMoisture}%`;
+      document.getElementById('hudTranspiration').textContent = m.rh > 78 ? 'High Fungal Dew Risk' : 'Optimal Transpiration';
+
+      // GHG
+      document.getElementById('hudGhgVal').textContent = `${m.co2} kg CO₂e`;
+      document.getElementById('hudGhgBar').style.width = `${Math.min(100, Math.round((m.co2 / 52) * 100))}%`;
+      document.getElementById('hudN2o').textContent = `N₂O: ${m.n2o}kg`;
+      document.getElementById('hudCh4').textContent = `CH₄: ${m.ch4}kg`;
+      document.getElementById('hudCo2Pure').textContent = `CO₂: ${m.co2Pure}kg`;
+    }
+
+    function renderSectorsSidebar() {
+      const container = document.getElementById('sectorsSidebarList');
+      const hub = document.getElementById('hubSelector').value;
+      const q = (document.getElementById('sectorFilterInput').value || '').toLowerCase();
+
+      const filtered = AGRICULTURAL_DATABASE.filter(p => {
+        const hubMatch = hub === 'ALL' || p.hub === hub;
+        const queryMatch = p.name.toLowerCase().includes(q) || p.crop.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
+        return hubMatch && queryMatch;
+      });
+
+      container.innerHTML = filtered.slice(0, 48).map(p => {
+        const m = computeSectorMetrics(p, currentStageIndex);
+        const isSel = selectedSector && selectedSector.id === p.id;
+        return `
+          <div onclick="selectFarmlandSector('${p.id}', true)" class="sector-item ${isSel ? 'active' : ''}">
+            <div style="overflow:hidden;">
+              <div style="font-size:12px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${p.id}: ${p.name}</div>
+              <div style="font-size:10px; color:var(--text-muted);">${p.crop} • ${p.area} Ha</div>
+            </div>
+            <div class="mono" style="text-align:right; flex-shrink:0;">
+              <div style="font-size:12px; font-weight:800; color:var(--ndvi);">${m.ndvi}</div>
+              <div style="font-size:10px; color:var(--water);">${m.rh}% RH</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSubPixelMatrix() {
+      const grid = document.getElementById('pixelMatrixWrap');
+      const base = computeSectorMetrics(selectedSector, currentStageIndex);
+      let html = '';
+      for (let r = 1; r <= 10; r++) {
+        for (let c = 1; c <= 10; c++) {
+          const v = Math.sin(r * 1.8 + c * 2.2 + selectedSector.lat * 40) * 0.05;
+          const pNdvi = Math.max(0.08, Math.min(0.92, +(base.ndvi + v).toFixed(2)));
+          const pRh = Math.max(25, Math.min(95, Math.round(base.rh + v * 35)));
+          const pGhg = +(base.co2 + v * 12).toFixed(1);
+
+          let fill = getNdviColor(pNdvi);
+          if (currentSpectralLayer === 'HUMIDITY') fill = getHumidityColor(pRh);
+          else if (currentSpectralLayer === 'EMISSION') fill = getEmissionColor(pGhg);
+
+          html += `<div class="subpixel" style="background:${fill};" onmouseenter="inspectSubPixel(${r},${c},${pNdvi},${pRh},${pGhg})"></div>`;
+        }
+      }
+      grid.innerHTML = html;
+    }
+
+    function inspectSubPixel(r, c, ndvi, rh, ghg) {
+      document.getElementById('subPixelLabel').textContent = `Pixel [R${r}, C${c}] (10m×10m)`;
+      document.getElementById('subPixelVigour').textContent = ndvi >= 0.70 ? 'High Vigour' : (ndvi >= 0.40 ? 'Moderate' : 'Stress Zone');
+      document.getElementById('subPixelNdvi').textContent = ndvi;
+      document.getElementById('subPixelRh').textContent = `${rh}%`;
+      document.getElementById('subPixelGhg').textContent = `${ghg}kg`;
+    }
+
+    function renderLegend() {
+      const container = document.getElementById('legendContainer');
+      if (currentSpectralLayer === 'NDVI') {
+        container.innerHTML = `
+          <div class="legend-item"><span class="legend-color" style="background:#10b981;"></span> 0.70–0.92 Dense Closed Canopy</div>
+          <div class="legend-item"><span class="legend-color" style="background:#84cc16;"></span> 0.40–0.69 Moderate Emergence</div>
+          <div class="legend-item"><span class="legend-color" style="background:#b45309;"></span> &lt;0.20 Bare Soil / Stubble</div>
+        `;
+      } else if (currentSpectralLayer === 'HUMIDITY') {
+        container.innerHTML = `
+          <div class="legend-item"><span class="legend-color" style="background:#0284c7;"></span> &gt;75% High RH / Moisture</div>
+          <div class="legend-item"><span class="legend-color" style="background:#38bdf8;"></span> 55–75% Optimal Root Zone</div>
+          <div class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span> &lt;55% Dry Topsoil</div>
+        `;
+      } else if (currentSpectralLayer === 'EMISSION') {
+        container.innerHTML = `
+          <div class="legend-item"><span class="legend-color" style="background:#ef4444;"></span> High Methane/N₂O Flux (&gt;35kg)</div>
+          <div class="legend-item"><span class="legend-color" style="background:#f59e0b;"></span> Moderate Flux (24–35kg)</div>
+          <div class="legend-item"><span class="legend-color" style="background:#10b981;"></span> Low Carbon Footprint (&lt;24kg)</div>
+        `;
+      } else {
+        container.innerHTML = `
+          <div class="legend-item"><span class="legend-color" style="background:#2e7d32;"></span> Sentinel-2 L2A BOA True Color Surface Reflectance</div>
+        `;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 5. PHENOLOGY TIME SERIES CHART & OBSERVATION LOG
+    // -------------------------------------------------------------
+    function drawPhenologyChart() {
+      const c = document.getElementById('phenologyChartCanvas');
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      const w = c.width, h = c.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const padL = 36, padR = 16, padT = 20, padB = 26;
+      const plotW = w - padL - padR, plotH = h - padT - padB;
+      const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
+      ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + (plotH * i) / 4;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+        ctx.fillStyle = isLight ? '#4b5563' : '#9ca3af';
+        ctx.font = '9.5px JetBrains Mono, monospace';
+        ctx.fillText((1 - i * 0.25).toFixed(2), 6, y + 3);
+      }
+
+      const ndviPoints = SEASON_STAGES.map((s, idx) => ({
+        x: padL + (idx / (SEASON_STAGES.length - 1)) * plotW,
+        y: padT + (1 - computeSectorMetrics(selectedSector, idx).ndvi) * plotH,
+        doy: s.doy
+      }));
+
+      const rhPoints = SEASON_STAGES.map((s, idx) => ({
+        x: padL + (idx / (SEASON_STAGES.length - 1)) * plotW,
+        y: padT + (1 - computeSectorMetrics(selectedSector, idx).rh / 100) * plotH
+      }));
+
+      // NDVI Line
+      ctx.beginPath();
+      ndviPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.8;
+      ctx.stroke();
+
+      // RH Line
+      ctx.beginPath();
+      rhPoints.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.strokeStyle = '#38bdf8';
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Dots & Labels
+      ndviPoints.forEach((p, idx) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, idx === currentStageIndex ? 6 : 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = idx === currentStageIndex ? '#ffffff' : '#10b981';
+        ctx.fill();
+        ctx.strokeStyle = '#10b981';
+        ctx.stroke();
+
+        ctx.fillStyle = isLight ? '#4b5563' : '#9ca3af';
+        ctx.font = '9.5px JetBrains Mono, monospace';
+        ctx.fillText(`D${p.doy}`, p.x - 12, h - 8);
+      });
+    }
+
+    function logCurrentObservation() {
+      const m = computeSectorMetrics(selectedSector, currentStageIndex);
+      observationList.unshift({ id: selectedSector.id, date: m.date, ndvi: m.ndvi, rh: m.rh, co2: m.co2 });
+      renderObservationTable();
+    }
+
+    function renderObservationTable() {
+      document.getElementById('observationLogTbody').innerHTML = observationList.map(r => `
+        <tr>
+          <td style="font-weight:800; color:var(--ndvi);">${r.id}</td>
+          <td>${r.date}</td>
+          <td style="font-weight:800;">${r.ndvi}</td>
+          <td style="color:var(--water);">${r.rh}%</td>
+          <td style="color:var(--ghg);">${r.co2}kg</td>
+        </tr>
+      `).join('');
+    }
+
+    function downloadObservationsCSV() {
+      const csv = 'Sector_ID,Observation_Date,NDVI,Relative_Humidity_Pct,GHG_Footprint_kg_CO2e\n' + 
+        observationList.map(r => `${r.id},${r.date},${r.ndvi},${r.rh},${r.co2}`).join('\n');
+      downloadFile(csv, 'Maharashtra_NDVI_Observation_Log.csv', 'text/csv');
+    }
+
+    // -------------------------------------------------------------
+    // 6. PUNE PHOTO SCANNER & COMPUTER VISION
+    // -------------------------------------------------------------
+    function loadSamplePhoto(preset) {
+      const src = document.getElementById('photoSourceCanvas');
+      const ctx = src.getContext('2d');
+      const w = src.width, h = src.height;
+
+      for (let y = 0; y < h; y += 4) {
+        for (let x = 0; x < w; x += 4) {
+          const n = Math.sin(x * 0.08) * Math.cos(y * 0.08);
+          if (preset === 'WAGHOLI_CANE') ctx.fillStyle = n > -0.3 ? 'rgb(35, 160, 75)' : 'rgb(115, 80, 55)';
+          else if (preset === 'BHIMA_PADDY') ctx.fillStyle = n > 0.1 ? 'rgb(40, 165, 85)' : 'rgb(45, 115, 155)';
+          else if (preset === 'BAKORI_MILLET') ctx.fillStyle = n > 0.25 ? 'rgb(120, 145, 60)' : 'rgb(160, 110, 70)';
+          else ctx.fillStyle = n > -0.1 ? 'rgb(65, 155, 75)' : 'rgb(135, 90, 65)';
+          ctx.fillRect(x, y, 4, 4);
+        }
+      }
+      runPhotoAnalysis();
+    }
+
+    function handlePhotoUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const src = document.getElementById('photoSourceCanvas');
+          src.getContext('2d').drawImage(img, 0, 0, src.width, src.height);
+          runPhotoAnalysis();
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function runPhotoAnalysis() {
+      const src = document.getElementById('photoSourceCanvas');
+      const dst = document.getElementById('photoHeatmapCanvas');
+      const sCtx = src.getContext('2d'), dCtx = dst.getContext('2d');
+      const imgData = sCtx.getImageData(0, 0, src.width, src.height);
+      const outData = dCtx.createImageData(src.width, src.height);
+      const d = imgData.data, o = outData.data;
+
+      let greenCount = 0, waterCount = 0;
+      const total = src.width * src.height;
+
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const vNdvi = (g - r) / (g + r + 1);
+        if (vNdvi > 0.08) {
+          greenCount++;
+          o[i] = 16; o[i + 1] = 185; o[i + 2] = 129; o[i + 3] = 255; // Emerald
+        } else if (b > r && b > g - 10) {
+          waterCount++;
+          o[i] = 56; o[i + 1] = 189; o[i + 2] = 248; o[i + 3] = 255; // Slate Water
+        } else {
+          o[i] = 245; o[i + 1] = 158; o[i + 2] = 11; o[i + 3] = 255; // Amber Soil
+        }
+      }
+      dCtx.putImageData(outData, 0, 0);
+
+      const gPct = Math.round((greenCount / total) * 100);
+      const wPct = Math.round((waterCount / total) * 100);
+      const sPct = Math.max(0, 100 - gPct - wPct);
+
+      document.getElementById('photoGreenPct').textContent = `${gPct}%`;
+      document.getElementById('photoSoilPct').textContent = `${sPct}%`;
+      document.getElementById('photoWaterPct').textContent = `${wPct}%`;
+
+      const estNdvi = Math.min(0.92, Math.max(0.15, +(0.20 + (gPct / 100) * 0.72).toFixed(2)));
+      let best = AGRICULTURAL_DATABASE[0], minDiff = 99;
+      AGRICULTURAL_DATABASE.slice(0, 10).forEach(p => {
+        const diff = Math.abs(p.peakNdvi - estNdvi);
+        if (diff < minDiff) { minDiff = diff; best = p; }
+      });
+
+      currentPhotoMatchedSector = best;
+      const m = computeSectorMetrics(best, currentStageIndex);
+      document.getElementById('photoMatchTitle').textContent = `${best.id}: ${best.name}`;
+      document.getElementById('photoMatchCrop').textContent = `Crop: ${best.crop} • ${best.soil}`;
+      document.getElementById('photoConfidenceBadge').textContent = `${Math.max(88, +(100 - minDiff * 38).toFixed(1))}% MATCH`;
+      document.getElementById('photoNdviVal').textContent = `${estNdvi} (${estNdvi >= 0.70 ? 'High Vigour' : 'Moderate'})`;
+      document.getElementById('photoRhVal').textContent = `${m.rh}% RH | ${m.soilMoisture}% Soil`;
+      document.getElementById('photoGhgVal').textContent = `${m.co2} kg CO₂e/ha/d`;
+      document.getElementById('photoGhgBreakdown').textContent = `N₂O: ${m.n2o}kg | CH₄: ${m.ch4}kg | CO₂: ${m.co2Pure}kg`;
+    }
+
+    function jumpPhotoToLiveMap() {
+      switchTab('browser');
+      if (currentPhotoMatchedSector) selectFarmlandSector(currentPhotoMatchedSector.id, true);
+    }
+
+    // -------------------------------------------------------------
+    // 7. MAHARASHTRA 152-SECTOR DATABASE & EXPORT
+    // -------------------------------------------------------------
+    function renderDatabaseTable() {
+      const q = (document.getElementById('dbSearchInput').value || '').toLowerCase();
+      const rows = AGRICULTURAL_DATABASE.filter(p => p.name.toLowerCase().includes(q) || p.crop.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.district.toLowerCase().includes(q));
+
+      // Calculate totals
+      const totalArea = +(AGRICULTURAL_DATABASE.reduce((a, b) => a + b.area, 0)).toFixed(0);
+      const avgNdvi = +(AGRICULTURAL_DATABASE.reduce((a, b) => a + b.peakNdvi, 0) / AGRICULTURAL_DATABASE.length).toFixed(2);
+      document.getElementById('dbStatTotalCount').textContent = AGRICULTURAL_DATABASE.length;
+      document.getElementById('dbStatTotalArea').textContent = `${Number(totalArea).toLocaleString()} Ha`;
+      document.getElementById('dbStatAvgNdvi').textContent = avgNdvi;
+
+      document.getElementById('fullDatabaseTableBody').innerHTML = rows.map(p => {
+        const m = computeSectorMetrics(p, currentStageIndex);
+        return `
+          <tr>
+            <td style="font-weight:800; color:var(--ndvi);">${p.id}</td>
+            <td style="font-weight:700;">${p.name}</td>
+            <td>${p.hub}</td>
+            <td>${p.district}</td>
+            <td>${p.crop}</td>
+            <td>${p.area}</td>
+            <td style="color:var(--text-muted);">${p.soil}</td>
+            <td style="font-weight:800; color:var(--ndvi);">${m.ndvi}</td>
+            <td style="color:var(--water);">${m.rh}%</td>
+            <td style="color:var(--ghg);">${m.co2} kg</td>
+            <td><button onclick="switchTab('browser'); selectFarmlandSector('${p.id}', true);" class="btn btn-outline" style="padding:3px 8px; font-size:10px;">Inspect</button></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function downloadDatabaseCSV() {
+      const headers = 'ID,Sector_Name,Division,District,Crop,Area_Ha,Soil_Type,Latitude,Longitude,Peak_NDVI,Base_RH,Base_CO2e\n';
+      const rows = AGRICULTURAL_DATABASE.map(p => `"${p.id}","${p.name}","${p.hub}","${p.district}","${p.crop}",${p.area},"${p.soil}",${p.lat},${p.lng},${p.peakNdvi},${p.baseRh},${p.baseCo2}`).join('\n');
+      downloadFile(headers + rows, 'Maharashtra_Copernicus_152_Sectors.csv', 'text/csv');
+    }
+
+    function downloadGeoJSON() {
+      const features = AGRICULTURAL_DATABASE.map(p => ({
+        type: 'Feature',
+        id: p.id,
+        properties: {
+          id: p.id,
+          name: p.name,
+          district: p.district,
+          division: p.hub,
+          crop: p.crop,
+          areaHa: p.area,
+          soil: p.soil,
+          peakNdvi: p.peakNdvi,
+          baseRh: p.baseRh,
+          baseCo2: p.baseCo2
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [p.coords.map(([lat, lng]) => [lng, lat])]
+        }
+      }));
+
+      const geojson = {
+        type: 'FeatureCollection',
+        name: 'Maharashtra_Copernicus_Sentinel2_Sectors',
+        features
+      };
+      downloadFile(JSON.stringify(geojson, null, 2), 'Maharashtra_Copernicus_Sectors.geojson', 'application/geo+json');
+    }
+
+    function downloadStandaloneAppFile() {
+      const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+      downloadFile(html, 'Maharashtra_Copernicus_Sentinel2_R&D_App.html', 'text/html;charset=utf-8');
+    }
+
+    function downloadFile(content, fileName, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // -------------------------------------------------------------
+    // 8. NDVI FORMULA LAB & SIMULATOR
+    // -------------------------------------------------------------
+    function recomputeSimulator() {
+      const nir = parseFloat(document.getElementById('simNirSlider').value);
+      const red = parseFloat(document.getElementById('simRedSlider').value);
+      document.getElementById('simNirVal').textContent = `${nir.toFixed(2)} (${Math.round(nir * 100)}%)`;
+      document.getElementById('simRedVal').textContent = `${red.toFixed(2)} (${Math.round(red * 100)}%)`;
+
+      const ndvi = ((nir - red) / (nir + red)).toFixed(2);
+      const savi = (((nir - red) / (nir + red + 0.5)) * 1.5).toFixed(2);
+      const ndmi = ((nir - 0.20) / (nir + 0.20)).toFixed(2);
+      const ndwi = ((0.15 - nir) / (0.15 + nir)).toFixed(2);
+
+      const status = ndvi >= 0.70 ? 'High-Vigour Closed Canopy (0.70 to 0.95)' : (ndvi >= 0.40 ? 'Moderate Vegetative Growth (0.40 to 0.70)' : 'Early Seedlings or Moisture Stress (< 0.40)');
+      document.getElementById('simResultCard').textContent = `NDVI = (${nir.toFixed(2)} - ${red.toFixed(2)}) / (${nir.toFixed(2)} + ${red.toFixed(2)}) = ${ndvi} → ${status}`;
+
+      document.getElementById('simSaviVal').textContent = savi;
+      document.getElementById('simNdmiVal').textContent = ndmi;
+      document.getElementById('simNdwiVal').textContent = ndwi;
+    }
+
+    // -------------------------------------------------------------
+    // 9. SEARCH, LIVE WEATHER & NAVIGATION
+    // -------------------------------------------------------------
+    function searchFarmland() {
+      const q = (document.getElementById('searchInput').value || '').toLowerCase();
+      const match = AGRICULTURAL_DATABASE.find(p => p.name.toLowerCase().includes(q) || p.district.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+      if (match) selectFarmlandSector(match.id, true);
+    }
+
+    async function fetchLiveWeather(district = 'Pune') {
+      try {
+        const res = await fetch(`/api/weather/${district}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.weather) {
+            document.getElementById('topWeatherText').textContent = `${district}: ${json.weather.temperatureC}°C • ${json.weather.relativeHumidityPct}% RH`;
+          }
+        }
+      } catch (e) {
+        // Fallback already displayed
+      }
+    }
+
+    function switchTab(tabId) {
+      ['browser', 'photo', 'database', 'simulator', 'board'].forEach(t => {
+        document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tabId);
+        document.getElementById(`tab-${t}`).classList.toggle('active', t === tabId);
+      });
+      if (tabId === 'browser' && map) {
+        setTimeout(() => map.invalidateSize(), 150);
+      }
+      if (tabId === 'database') renderDatabaseTable();
+    }
+
+    function openExportModal() {
+      document.getElementById('exportModal').classList.remove('hidden');
+    }
+
+    function closeExportModal() {
+      document.getElementById('exportModal').classList.add('hidden');
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      const next = current === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      drawPhenologyChart();
+    }
+
+    // -------------------------------------------------------------
+    // 10. INITIALIZATION
+    // -------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      observationList = [];
+      initRealLeafletMap();
+      renderSectorsSidebar();
+      logCurrentObservation();
+      loadSamplePhoto('WAGHOLI_CANE');
+      recomputeSimulator();
+      fetchLiveWeather('Pune');
+    });
+  </script>
+</body>
+</html>
